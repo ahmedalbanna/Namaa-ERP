@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "Donor": {
+      "title": "Donor",
+      "description": "Information about individuals or organizations contributing funds or materials.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the donor" },
+        "type": { "type": "string", "enum": ["Individual", "Organization"], "description": "Type of donor" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "country": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type"]
+    },
+    "Program": {
+      "title": "Program",
+      "description": "Specific aid programs or projects with allocated budgets.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Program name" },
+        "description": { "type": "string" },
+        "budget": { "type": "number", "description": "Total allocated budget" },
+        "spent": { "type": "number", "description": "Amount spent so far" },
+        "currency": { "type": "string", "enum": ["USD", "YER", "SAR"] },
+        "status": { "type": "string", "enum": ["Planned", "Active", "Completed"] },
+        "startDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "budget", "currency", "status"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "A financial or in-kind contribution linked to a donor and program.",
+      "type": "object",
+      "properties": {
+        "donorId": { "type": "string", "description": "ID of the donor" },
+        "programId": { "type": "string", "description": "ID of the target program" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["Cash", "In-kind"] },
+        "itemName": { "type": "string", "description": "Used if type is In-kind" },
+        "date": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" }
+      },
+      "required": ["donorId", "programId", "amount", "type", "date"]
+    },
+    "ReliefItem": {
+      "title": "Relief Item",
+      "description": "Inventory management for physical relief supplies.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["Food", "Medical", "Shelter", "Other"] },
+        "unit": { "type": "string", "description": "e.g., Box, KG, Liter" },
+        "stockLevel": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "unit", "stockLevel"]
+    },
+    "Distribution": {
+      "title": "Distribution",
+      "description": "Records of relief item distribution to final beneficiaries.",
+      "type": "object",
+      "properties": {
+        "programId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "beneficiaryName": { "type": "string" },
+        "location": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["programId", "itemId", "quantity", "beneficiaryName", "date"]
+    }
+  },
+  "firestore": {
+    "/donors/{donorId}": {
+      "schema": "Donor",
+      "description": "Collection of donors."
+    },
+    "/programs/{programId}": {
+      "schema": "Program",
+      "description": "Collection of programs/projects."
+    },
+    "/donations/{donationId}": {
+      "schema": "Donation",
+      "description": "Record of all financial and in-kind contributions."
+    },
+    "/inventory/{itemId}": {
+      "schema": "ReliefItem",
+      "description": "Relief material stock records."
+    },
+    "/distributions/{distId}": {
+      "schema": "Distribution",
+      "description": "Logs of supply distributions."
+    },
+    "/admins/{userId}": {
+      "schema": { "type": "object", "properties": { "role": { "type": "string" } } },
+      "description": "System administrators mapping."
+    }
+  }
+}

@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Phase 4: Entity Validations
+    
+    function isValidDonor(data) {
+      return data.keys().hasAll(['name', 'type']) 
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 200
+        && data.type in ['Individual', 'Organization']
+        && (!('email' in data) || (data.email is string && data.email.size() <= 255))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 50));
+    }
+
+    function isValidProgram(data) {
+      return data.keys().hasAll(['name', 'budget', 'currency', 'status'])
+        && data.name is string && data.name.size() <= 200
+        && data.budget is number && data.budget >= 0
+        && data.currency in ['USD', 'YER', 'SAR']
+        && data.status in ['Planned', 'Active', 'Completed'];
+    }
+
+    function isValidDonation(data) {
+      return data.keys().hasAll(['donorId', 'programId', 'amount', 'type', 'date'])
+        && isValidId(data.donorId)
+        && isValidId(data.programId)
+        && data.amount is number && data.amount > 0
+        && data.type in ['Cash', 'In-kind']
+        && exists(/databases/$(database)/documents/donors/$(data.donorId))
+        && exists(/databases/$(database)/documents/programs/$(data.programId));
+    }
+
+    function isValidReliefItem(data) {
+      return data.keys().hasAll(['name', 'category', 'unit', 'stockLevel'])
+        && data.name is string && data.name.size() <= 200
+        && data.category in ['Food', 'Medical', 'Shelter', 'Other']
+        && data.unit is string && data.unit.size() <= 50
+        && data.stockLevel is number && data.stockLevel >= 0;
+    }
+
+    function isValidDistribution(data) {
+      return data.keys().hasAll(['programId', 'itemId', 'quantity', 'beneficiaryName', 'date'])
+        && isValidId(data.programId)
+        && isValidId(data.itemId)
+        && data.quantity is number && data.quantity > 0
+        && data.beneficiaryName is string && data.beneficiaryName.size() <= 200
+        && exists(/databases/$(database)/documents/programs/$(data.programId))
+        && exists(/databases/$(database)/documents/inventory/$(data.itemId));
+    }
+
+    // COLLECTION MATCH BLOCKS
+
+    match /donors/{donorId} {
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isValidDonor(incoming()) && isValidId(donorId);
+      allow update: if isEmailVerified() && isValidDonor(incoming()) && (
+        isAdmin() || (incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'country']))
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /programs/{programId} {
+      allow read: if isEmailVerified();
+      allow create: if isAdmin() && isValidProgram(incoming()) && isValidId(programId);
+      allow update: if isEmailVerified() && isValidProgram(incoming()) && (
+        isAdmin() || (
+          // Staff can potentially update status or spent-related fields if we added a staff role
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'spent', 'description'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /donations/{donationId} {
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isValidDonation(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /inventory/{itemId} {
+      allow read: if isEmailVerified();
+      allow create: if isAdmin() && isValidReliefItem(incoming());
+      allow update: if isEmailVerified() && isValidReliefItem(incoming()) && (
+        isAdmin() || incoming().diff(existing()).affectedKeys().hasOnly(['stockLevel', 'lastUpdated'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /distributions/{distId} {
+      allow read: if isEmailVerified();
+      allow create: if isEmailVerified() && isValidDistribution(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /admins/{userId} {
+      allow read: if isEmailVerified();
+      allow write: if false; // Managed manually or through a specific secure trigger
+    }
+  }
+}
